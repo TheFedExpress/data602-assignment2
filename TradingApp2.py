@@ -74,7 +74,9 @@ class Trade(tk.Frame):
         self.columnconfigure(0, weight=1)
         self.rowconfigure(0, weight=1)
         
-        ticker = StringVar()
+        self.ticker = StringVar()
+        self.final_ticker = StringVar()
+        self.final_shares = StringVar()
         price = StringVar()
         trade_type = StringVar(None, 'buy')
         trade_type.set("buy")
@@ -102,10 +104,10 @@ class Trade(tk.Frame):
                 
         entershares = ttk.Entry(self, textvariable = shares)
         entershares.grid(column = 1, row = 13, in_=self.lfdata)
-        enterticker = ttk.Entry(self, textvariable = ticker, in_=self.lfdata)
+        enterticker = ttk.Entry(self, textvariable = self.ticker, in_=self.lfdata)
         enterticker.grid(column = 1, row = 5,  sticky = 'we', padx=5, pady=5, in_=self.lfdata) 
         lookup = tk.Button(self, text = 'Show Chart', 
-                           command = lambda: self.showChart(ticker.get()))
+                           command = lambda: self.showChart())
         lookup.grid(column = 2, row = 4,  sticky = 'we')
         
         #buttons
@@ -115,7 +117,7 @@ class Trade(tk.Frame):
         back_button.grid(column = 4, row = 14, sticky = 'we')
         
         price_button = tk.Button(self, text = 'Check Price', 
-                                 command = lambda: self.getCurrent(price,ticker.get(), trade_type.get()))
+                                 command = lambda: self.getCurrent(price,self.ticker.get(), self.trade_type.get()))
         price_button.grid(column = 2, row = 5, padx=5, pady=5)
         trade_button = tk.Button(self, text = 'Make Trade', state=DISABLED,
                                  command = lambda: self.getCurrent(price,ticker.get(), trade_type.get()))
@@ -133,8 +135,10 @@ class Trade(tk.Frame):
                                 variable = trade_type, value = 'cover')
         cover.grid(column = 1, row = 10, sticky = 'we', in_=self.lfdata)
         
+        
+        
 
-    def showChart(self, ticker):
+    def showChart(self):
         import requests
         from datetime import datetime, timedelta
         import matplotlib.pyplot as plt
@@ -143,7 +147,8 @@ class Trade(tk.Frame):
         from matplotlib.figure import Figure
         start = datetime.now() - timedelta(days = 120)
         end = datetime.now()
-        url = 'https://min-api.cryptocompare.com/data/histoday?fsym={}&tsym=USDT&limit=120&aggregate=1'.format(ticker.upper())
+        ticker = self.ticker.get().upper()
+        url = 'https://min-api.cryptocompare.com/data/histoday?fsym={}&tsym=USDT&limit=120&aggregate=1'.format(ticker)
         response = requests.get(url)
         json_text = response.json()['Data']
         df = pd.DataFrame(json_text, columns = ['time', 'low', 'high', 'open', 'close', 'volume'])
@@ -189,7 +194,9 @@ class Trade(tk.Frame):
             price.set(bid)
         elif trade_type == 'check':
             return(bid, ask, last)
-                
+    
+    def previewTrade():
+        
 
 class BlotterPage(tk.Frame):
 
