@@ -23,44 +23,45 @@ def get_current(ticker, trade_type):
 """        
 def get_current(ticker, trade_type):
     import requests
-    url = 'https://api.gdax.com/ticker{}-USD/ticker'.format(ticker)
+    url = 'https://bittrex.com/api/v1.1/public/getticker?market=USDT-{}'.format(ticker.upper())
     response = requests.get(url)
-    json_text = response.json()
+    json_text = response.json()['result']
 
-    bid = float(json_text['bid'])
-    ask = float(json_text['ask'])
-    last = float(json_text['price'])
+    bid = float(json_text['Bid'])
+    ask = float(json_text['Ask'])
+    last = float(json_text['Last'])
     if trade_type in ('buy', 'cover'):
         return ask
     elif trade_type in ('sell', 'short'):
         return bid
     elif trade_type == 'check':
         return(bid, ask, last)
+
+print(get_current('ath', 'buy'))
    
-def get_charts(from_ticker, to_ticker):
+def get_charts(ticker):
     import requests
     from datetime import datetime, timedelta
     import matplotlib.pyplot as plt
     import pandas as pd
     start = datetime.now() - timedelta(days = 120)
     end = datetime.now()
-    url = 'https://min-api.cryptocompare.com/data/histoday?fsym={}&tsym={}&limit=120&aggregate=1'.format(from_ticker.upper(), to_ticker.upper())
+    url = 'https://min-api.cryptocompare.com/data/histoday?fsym={}&tsym=USDT&limit=120&aggregate=1'.format(ticker.upper())
     response = requests.get(url)
-    json_text = response.json()
-    df = pd.DataFrame(json_text['Data'])
+    json_text = response.json()['Data']
+    df = pd.DataFrame(json_text, columns = ['time', 'low', 'high', 'open', 'close', 'volume'])
     df.sort_values(by = ['time'], inplace = True)
     dates = df['time'].map(datetime.fromtimestamp)
     df['time'] = dates
-    plt.plot('time', 'close', data = df.iloc[19:119, :])
-    plt.title('{} to {} (last 100 days)'.format(from_ticker, to_ticker))
-    plt.ylabel('{} Price ({})'.format(from_ticker.upper(), to_ticker.upper()))
+    plot = plt.plot('time', 'close', data = df.iloc[19:119, :])
+    plt.title('{} to USD (last 100 days)'.format(ticker))
+    plt.ylabel('{} Price (USD)'.format(ticker.upper()))
     plt.xlabel('Date')
     labels = dates.map('{:%Y-%m-%d}'.format)[19:119:5].values
     plt.xticks(labels, labels, rotation = 45)
     df['moving'] = df['close'].rolling(window = 20).mean()
     plt.plot('time', 'moving', data = df)
-    plt.title('{} to {} History'.format(from_ticker.upper(), to_ticker.upper()))
+    plt.title('{} Price History'.format(ticker.upper()))
     plt.legend()
-    plt.show()
 
-get_charts('btc', 'usdt')
+

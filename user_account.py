@@ -12,7 +12,8 @@ class UserAccount:
         start = {"cash": {"position": 0, "market": 100000000.0, "wap" : 0.0, "rpl": 0.0, "upl": 0.0, "total_pl": 0.0,
                                        "allocation_by_shares": 0.0, "allocation_by_dollars": 100.0}}
         self.pl = pd.DataFrame.from_dict(start, orient = 'index')        
-        self.transaction_log = []
+        self.blotter = pd.DataFrame(columns = [ "tran_type", "currency", "shares", "price",
+                             "net", "cash_balance"])
     
     def __len__(self):
         return len(self.transaction_log)
@@ -83,14 +84,17 @@ class UserAccount:
                         self.pl.loc[ticker, "wap"] = 0
                         
                     date = datetime.now ()
-                    trans = {"tran_type" : tran_type, "stock": ticker, "shares": shares, "price": price,
-                             "net": -total, "timestamp" : date}
-                    self.transaction_log.append(trans)
+                    trans = (tran_type,  ticker, shares, price, -total, cash)
+                    self.blotter.loc[date] = trans
                     message = "\nYou have made a {} of {} shares of {} at {:,.2f}"
                     print(message.format(tran_type, shares, ticker.upper(), price))
                     time.sleep(4)
                 else:
+                    date = datetime.now ()
                     self.pl.loc['cash', 'market'] -= total
+                    cash = self.pl.loc['cash', 'market']
+                    trans =  (tran_type,  ticker, shares, price, -total, cash)
+                    self.blotter.loc[date] = trans
                     self.pl.loc[ticker, ['position', 'market', 'wap', 'rpl', 'upl', 'total_pl', 
                                          'allocation_by_dollars', 'allocation_by_shares']] = (shares, 0, price, 0, 0, shares*price, 0, 0)
                 
@@ -150,19 +154,20 @@ class UserAccount:
                            
                    self.pl.loc[ticker, "shares"] = new_shares
                    if new_shares == 0:
-                       self.pl.loc[ticker, "wap"] = 0
-     
-                   
+                       self.pl.loc[ticker, "wap"] = 0               
 
                    date = datetime.now ()
-                   trans = {"tran_type" : tran_type, "stock": ticker, "shares": shares, "price": price,
-                            "net": total,  "timestamp" : date}
-                   self.transaction_log.append(trans)
+                   trans = (tran_type,  ticker, shares, price, total, cash)
+                   self.blotter.loc[date] = trans
                    
                    message = "You have made a {} of {} shares of {} at {:,.2f}"
                    print(message.format(tran_type, shares, ticker.upper(), price))
                    time.sleep(4)
                else:
+                   date = datetime.now ()
+                   self.pl.loc['cash', 'market'] += total
+                   cash = self.pl.loc['cash', 'market']
+                   trans = (tran_type,  ticker, shares, price, total, cash)                   
                    self.pl.loc['cash', 'market'] = total + cash
                    self.pl.loc[ticker, ['position', 'market', 'wap', 'rpl', 'upl', 'total_pl', 
                      'allocation_by_dollars', 'allocation_by_shares']] = (-shares, 0, price, 0, 0, -shares*price, 0, 0)
@@ -179,24 +184,24 @@ class UserAccount:
         
         os.system('clear')
         
-        if len(self.transaction_log) == 0:
+        if len(self.blotter.index) == 0:
             print("You haven't made any transactions with us.")
             time.sleep(4)
         else:
-            df = pd.DataFrame(self.transaction_log)
+            df = self.blotter
             df["price"] = df["price"].map('${:,.2f}'.format)
             df["net"] = df["net"].map('${:,.2f}'.format)
-            df["timestamp"] = df["timestamp"].map('{:%Y-%m-%d %H:%M}'.format)
+            df["cash_balance"] = df["cash_balance"].map('${:,.2f}'.format)
             
-            final_df = df[["stock", "price", "shares", "tran_type", "net", "timestamp"]]
-            labels = ["Stock", "Price", "Shares Traded", "Transaction Type",
-                      "Net Cash Flow", "Timestamp"]
+            final_df = df[["currency", "price", "shares", "tran_type", "net", "cash_balance"]]
+            labels = ["Transaction Date", "Currency", "Price", "Shares Traded", "Transaction Type",
+                      "Net Cash Flow", "Cash Balance"]
             
             table = PrettyTable()
             
             table.field_names = (labels)
             for row in final_df.itertuples():
-                table.add_row(row[1:])
+                table.add_row(row)
 
             
             print(table)
