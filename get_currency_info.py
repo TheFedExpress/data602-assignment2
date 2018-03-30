@@ -37,7 +37,6 @@ def get_current(ticker, trade_type):
     elif trade_type == 'check':
         return(bid, ask, last)
 
-print(get_current('ath', 'buy'))
    
 def get_charts(ticker):
     import requests
@@ -64,4 +63,16 @@ def get_charts(ticker):
     plt.title('{} Price History'.format(ticker.upper()))
     plt.legend()
 
-
+def get_24(ticker):
+    import requests
+    import pandas as pd
+    url = 'https://min-api.cryptocompare.com/data/histominute?fsym={}&tsym=USDT'.format(ticker.upper())
+    response = requests.get(url)
+    obj = response.json()['Data']
+    df = pd.DataFrame(obj, columns = ['time', 'low', 'high', 'open', 'close', 'volume'])
+    raw = df['close'].values
+    stats = [raw.std(), raw.mean(), raw.min(), raw.max()]
+    formated = tuple(['${:,.2f}'.format(item) for item in stats])
+    return formated
+    
+    

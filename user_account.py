@@ -7,30 +7,55 @@ Created on Sat Feb 17 16:53:12 2018
 
 class UserAccount:
     
-    def __init__(self, starting = 100000000):
+    def __init__(self, db, starting = 100000000):
         import pandas as pd
-        start = {"cash": {"position": 0, "market": 100000000.0, "wap" : 0.0, "rpl": 0.0, "upl": 0.0, "total_pl": 0.0,
-                                       "allocation_by_shares": 0.0, "allocation_by_dollars": 100.0}}
-        self.pl = pd.DataFrame.from_dict(start, orient = 'index')        
-        self.blotter = pd.DataFrame(columns = [ "tran_type", "currency", "shares", "price",
-                             "net", "cash_balance"])
-    
-    def __len__(self):
-        return len(self.transaction_log)
-    
-    def __getitem__(self, position):
-        return self.transaction_log[position]
+        from datetime import datetime
+        if db.new_account == 1:
+            start = {"cash": {"position": 0, "market": 100000000.0, "wap" : 0.0, "rpl": 0.0, "upl": 0.0, "total_pl": 0.0,
+                                           "allocation_by_shares": 0.0, "allocation_by_dollars": 100.0}}
+            self.pl = pd.DataFrame.from_dict(start, orient = 'index')
+            db.pl_insert(self.pl, 'cash')
+            self.blotter = pd.DataFrame(columns = [ "cash_balance", "currency", "net", "price",
+                                 "shares", "tran_type"])
+            self.blotter_rows = 0
+        else:
+            pl_recs = db.db.pl.find({})
+            pl_dict = {}
+            for rec in pl_recs:
+                for key in rec.keys():
+                    if key != '_id':
+                        pl_dict[key] = rec[key]
+            self.pl = pd.DataFrame.from_dict(pl_dict, orient = 'index')
+            self.blotter_rows = db.db.blotter.count()
+            if self.blotter_rows > 0:
+                blotter_list = []
+                blotter_recs = db.db.blotter.find({})
+                for rec in blotter_recs:
+                    record_dict = {}
+                    for key in rec.keys():
+                        if key != '_id':
+                            if key == 'date':
+                                record_dict[key] = datetime.fromtimestamp(rec[key])
+                            else:
+                                record_dict[key] = rec[key]
+                    blotter_list.append(record_dict)
+                            
+                self.blotter = pd.DataFrame(blotter_list)
+                self.blotter.set_index('date', inplace=True)
+
+            else:
+                self.blotter = pd.DataFrame(columns = [ "cash_balance", "currency", "net", "price",
+                                 "shares", "tran_type"])
+
     
     #For fungible shares, it doesn't make sense to allow for simultaneous short and long positions
     #This would also require two lines on the P/L, causing confusion
-    def evalTransaction(self, tran_type, shares, price, ticker):
+    def evalTransaction(self, tran_type, shares, price, ticker, db):
        from datetime import datetime
        from get_currency_info import get_current
-       import pandas as pd
-       import time
        cash = self.pl.loc['cash', 'market']
        try:
-            prev_shares = self.pl.loc[ticker, "shares"]
+            prev_shares = self.pl.loc[ticker, "position"]
             new = 0
        except KeyError:
             new = 1
@@ -40,32 +65,26 @@ class UserAccount:
             #User abuse/misuse prevention
             if tran_type == "buy":
                 margin = 0
-                for security in self.pl.index:
-                    if self.pl.loc[security, "position"] < 0:
-                        margin += self.pl.loc[security, "position"] * get_current(security, "buy") * -1
+                for currency in self.pl.index:
+                    if self.pl.loc[currency, "position"] < 0:
+                        margin += self.pl.loc[currency, "position"] * get_current(currency, "buy") * -1
 
             if tran_type == "cover" and prev_shares >= 0:
-                    print("\nYou do not have any short sales with this security")
-                    time.sleep(4)#This will allow the user to see the Error reason before the
-                                #screen is cleared
+                self.message = "You do not have any short sales with this security"
             elif tran_type == "cover" and shares + prev_shares > 0:
-                message = "\nYou have attempted to cover {} shares.  Please cover {} shares or less"
-                print(message.format(shares, -prev_shares))
-                time.sleep(4)
+                self.message = "\nYou have attempted to cover {} shares.  Please cover {} shares or less"
+                self.message.format(shares, -prev_shares)
                 
             elif tran_type == "buy" and cash <= margin * 2 + shares * price:
-                message = "\nThis transaction requires ${:,.2f} in your account.  You have ${:,.2f}."
-                print(message.format(margin * 2 + shares * price, cash))
-                time.sleep(4)
+                self.message = "\nThis transaction requires ${:,.2f} in your account.  You have ${:,.2f}."
+                self.message.format(margin * 2 + shares * price, cash)
                 
             elif tran_type == "buy" and prev_shares < 0:
-                message = "\nYou currently have {} shares of {} shorted.  Please cover those before buying."
-                print(message.format(prev_shares*-1, ticker))
-                time.sleep(4)
+                self.message = "\nYou currently have {} shares of {} shorted.  Please cover those before buying.".format(shares, ticker)
                 
             else:#Process transaction
+                self.pl.loc['cash', 'market'] -= total
                 if new == 0:
-                    self.pl.loc['cash', 'market'] -= total
                     new_shares = prev_shares + shares
                     if tran_type == "buy":
                         if self.pl.loc[ticker, "position"] == 0:
@@ -82,21 +101,27 @@ class UserAccount:
                     
                     if new_shares == 0:#for aesthetics in the P&L
                         self.pl.loc[ticker, "wap"] = 0
+                    db.pl_update(self.pl, ticker)
+                    db.pl_update(self.pl, 'cash')
                         
                     date = datetime.now ()
-                    trans = (tran_type,  ticker, shares, price, -total, cash)
+                    trans = (cash,  ticker, -total, price, shares, tran_type)
                     self.blotter.loc[date] = trans
-                    message = "\nYou have made a {} of {} shares of {} at {:,.2f}"
-                    print(message.format(tran_type, shares, ticker.upper(), price))
-                    time.sleep(4)
+                    self.blotter_rows += 1
+                    db.blotter_insert(date, trans)
+
+                    self.message = "Success"
                 else:
                     date = datetime.now ()
-                    self.pl.loc['cash', 'market'] -= total
                     cash = self.pl.loc['cash', 'market']
-                    trans =  (tran_type,  ticker, shares, price, -total, cash)
+                    trans = (cash,  ticker, -total, price, shares, tran_type)
                     self.blotter.loc[date] = trans
+                    self.blotter_rows += 1
                     self.pl.loc[ticker, ['position', 'market', 'wap', 'rpl', 'upl', 'total_pl', 
                                          'allocation_by_dollars', 'allocation_by_shares']] = (shares, 0, price, 0, 0, shares*price, 0, 0)
+                    db.pl_update(self.pl, 'cash')
+                    db.pl_insert(self.pl, ticker)
+                    db.blotter_insert(date, trans)
                 
        else:#sell/short      
             #simplified margin system only based on cash
@@ -106,124 +131,90 @@ class UserAccount:
             #the app
             if tran_type == "short":
                 margin = 0
-                for security in self.pl.index:
-                    if self.pl.loc[security, "position"] < 0:
-                        margin += self.pl.loc[security, "position"] * get_current(security, "buy") * -1
+                for currency in self.pl.index:
+                    if self.pl.loc[currency, "position"] < 0:
+                        margin += self.pl.loc[currency, "position"] * get_current(currency, "buy") * -1
                                  
             if tran_type == "sell" and prev_shares < 0:
-                print("\nInvalid transaction")
-                print("You have a short position in {} of {} shares".format(ticker, prev_shares*-1))
-                time.sleep(4)
+                self.message = "You have a short position in {0} of {1} shares".format(ticker, prev_shares*-1)
                 
             elif tran_type == "sell" and prev_shares < shares:
-                print("\nYou have {} shares of {} in you account".format(prev_shares, ticker))
-                print("Please choose a different quantity to sell")
-                time.sleep(4)
+                self.message= "You have {0} shares of {1} in you account.  Please choose a different quantity to sell".format(prev_shares, ticker)
+                
                 
             elif tran_type == "short" and prev_shares > 0:
-                print("\nInvalid transaction")
-                message = "You have a long position in {} of {} shares.  Please sell before shorting"
-                print(message.format(ticker, prev_shares))
-                time.sleep(4)
+                self.message = "You have a long position in {} of {} shares.  Please sell before shorting"
                 
             elif tran_type == "short" and cash <= (margin * 2 + shares * price):
-                print("\nYou must meet the margin requirement of 200%")
-                message = "This transaction requires ${:,.2f} in your account.  You have ${:,.2f}."
-                print(message.format((margin * 2 + shares * price), cash))
-                time.sleep(4)
+                self.message = "This transaction requires ${:,.2f} in your account.  You have ${:,.2f}."
             else:
                self.pl.loc['cash', 'market'] = total + cash
                if new == 0:
                #process transaction
-                   new_shares = self.positions.loc[security,'shares'] - shares
-                   total = shares * price
+                   new_shares = self.pl.loc[ticker,'position'] - shares
                    
                    if tran_type == "sell":
                        
                        gain = total -  self.pl.loc[ticker, 'wap'] * shares
-                       self.pl.loc[ticker, 'rpl']  = self.positions[ticker]["rpl"] + gain
+                       self.pl.loc[ticker, 'rpl']  = self.pl.loc[ticker, "rpl"] + gain
                        
                    else:#short
-                       self.pl.loc['cash', 'market'] = total + cash
-                       if self.pl.loc[ticker, 'shares'] == 0:
+                       if self.pl.loc[ticker, 'position'] == 0:
                            self.pl.loc[ticker, "wap"] = price
                            
                        else:
                            prev_value = prev_shares * self.pl.loc[ticker, "wap"]*-1
                            self.pl.loc[ticker, "wap"] = (prev_value + shares * price)/new_shares*-1
                            
-                   self.pl.loc[ticker, "shares"] = new_shares
+                   self.pl.loc[ticker, "position"] = new_shares
                    if new_shares == 0:
                        self.pl.loc[ticker, "wap"] = 0               
+                   db.pl_update(self.pl, ticker)
+                   db.pl_update(self.pl, 'cash')
 
                    date = datetime.now ()
-                   trans = (tran_type,  ticker, shares, price, total, cash)
+                   trans = (cash,  ticker, total, price, shares, tran_type)
                    self.blotter.loc[date] = trans
+                   self.blotter_rows += 1
+                   db.blotter_insert(date, trans)
+                  
+                   self.message = 'Success'
                    
-                   message = "You have made a {} of {} shares of {} at {:,.2f}"
-                   print(message.format(tran_type, shares, ticker.upper(), price))
-                   time.sleep(4)
                else:
                    date = datetime.now ()
-                   self.pl.loc['cash', 'market'] += total
                    cash = self.pl.loc['cash', 'market']
-                   trans = (tran_type,  ticker, shares, price, total, cash)                   
-                   self.pl.loc['cash', 'market'] = total + cash
+                   trans = (cash,  ticker, total, price, shares, tran_type)
+                   self.blotter.loc[date] = trans
+                   self.blotter_rows += 1
                    self.pl.loc[ticker, ['position', 'market', 'wap', 'rpl', 'upl', 'total_pl', 
                      'allocation_by_dollars', 'allocation_by_shares']] = (-shares, 0, price, 0, 0, -shares*price, 0, 0)
-    
+                   db.pl_insert(self.pl, ticker)
+                   db.pl_update(self.pl, 'cash')
 
 
                 
     def showBlotter(self):
-        import pandas as pd
-        from prettytable import PrettyTable
-        import time
-        import os
-        from menu import exit_app
-        
-        os.system('clear')
-        
-        if len(self.blotter.index) == 0:
-            print("You haven't made any transactions with us.")
-            time.sleep(4)
-        else:
-            df = self.blotter
+        if self.blotter_rows > 0:
+            df = self.blotter.copy()
             df["price"] = df["price"].map('${:,.2f}'.format)
             df["net"] = df["net"].map('${:,.2f}'.format)
             df["cash_balance"] = df["cash_balance"].map('${:,.2f}'.format)
+            dates = df.index
+            df['Transaction Date'] = dates
             
-            final_df = df[["currency", "price", "shares", "tran_type", "net", "cash_balance"]]
+            df = df[['Transaction Date', "currency", "price", "shares", "tran_type", "net", "cash_balance"]]
             labels = ["Transaction Date", "Currency", "Price", "Shares Traded", "Transaction Type",
                       "Net Cash Flow", "Cash Balance"]
+            df.columns = labels
+            self.blotter_view = df
             
-            table = PrettyTable()
-            
-            table.field_names = (labels)
-            for row in final_df.itertuples():
-                table.add_row(row)
-
-            
-            print(table)
-            while True:
-                answer = input("Enter 9 to return to main menu: ")
-                if answer == "9":
-                    break
-                elif answer.lower() == "quit":
-                    exit_app()
 
            
     def showPL(self):
-        import pandas as pd
         import numpy as np
         from get_currency_info import get_current
-        from menu import exit_app
-        from prettytable import PrettyTable
-        import os
         
-        os.system('clear')
-        
-        df = self.pl[self.pl.index != 'cash']
+        df = self.pl.copy()[self.pl.index != 'cash']
         #create a datafram from positions for easy calculated columns
         markets = []
         for position in df.index.values:
@@ -241,9 +232,14 @@ class UserAccount:
         df.fillna(0)
         df.replace(np.nan, 0, inplace=True)
         
-        final_df = df[["position", "market", "total_value", 'value_weight', 'share_weight', "wap", "upl", 
+        final_df = df
+        currencies = final_df.index
+        final_df['currency'] = currencies
+        final_df = df[['currency', "position", "market", "total_value", 'value_weight', 'share_weight', "wap", "upl", 
                        "rpl"]]
         
+        
+                    
         #total row
         val = cash + np.sum(final_df["total_value"])
         totals = ['Total', '', '',  val,'', '', '', np.sum(final_df["upl"]), np.sum(final_df["rpl"])]
@@ -252,31 +248,54 @@ class UserAccount:
                 totals[item] = "${:,.2f}".format(totals[item]) 
                 
         totals = tuple(totals)
+        cash_row = ("Cash", '', '', "${:,.2f}".format(cash),'', '',  '', '','')
+        space_row = tuple(['' for i in range(9)])
         
         for item in ["market", "total_value", "wap", "upl", "rpl"]:
             final_df[item] = final_df[item].map('${:,.2f}'.format)
+        for item in ['value_weight', 'share_weight']:
+            final_df[item] = (final_df[item]*100).map('{:,.0f}%'.format)
             
-        #Final printing table
-        table = PrettyTable()
+        rows = len(final_df)
         
-        cols = ["Currency", "Position", "Market Price","Total Value",'Value Weight', 'Share Weight',
-                "WAP", "UPL", "RPL"]       
-        
-        table.field_names = (cols)
-        for row in final_df.itertuples():
-            table.add_row(row)
+        final_df.loc[rows] = cash_row
+        final_df.loc[rows + 1] = space_row
+        final_df.loc[rows + 2] = totals
             
-        table.add_row(('', '', '', '', '','', '', '', ''))
-        table.add_row(("Cash", '', '', "${:,.2f}".format(cash),'', '',  '', '',''))
-        table.add_row(('', '', '', '', '','', '', '', ''))
-        table.add_row((totals))
-        print(table)
+        cols = ['Currency', "Position", "Market Price", "Total Value", 'Value Weight', 'Share Weight',
+                "WAP", "UPL", "RPL"]
         
-        while True:
-            answer = input("Enter 9 to return to main menu: ")
-            if answer == "9":
-                break
-            elif answer.lower() == "quit":
-                exit_app()
+        
+        final_df.columns = cols
+        self.pl_view = final_df
 
+class UserDB:
+    def __init__(self):
+        from pymongo import MongoClient
+        client = MongoClient('localhost', 27017)
+        self.db = client.account
+        if self.db.pl.count() > 0:
+            self.new_account = 0
+        else:
+            self.new_account = 1
+        
+        
+    def pl_insert(self, df, ticker):
+        item = df.loc[ticker].to_dict()
+        self.db.pl.insert_one({ticker: item})
+        
+    def pl_update(self, df, ticker):
+        item = df.loc[ticker].to_dict()
+        self.db.pl.update_one({ticker : {'$exists' : True}}, {'$set': {ticker : item}})
+
+    def blotter_insert(self, date, row):
+         from datetime import datetime
+         keys = [ "cash_balance", "currency", "net", "price",
+                                 "shares", "tran_type", 'date']
+         vals = list(row)
+         since_date = datetime(1970, 1, 1, 0, 0, 0)
+         seconds = (date - since_date).total_seconds()
+         vals.append(seconds)
+         doc = dict(zip(keys, vals))
+         self.db.blotter.insert_one(doc)
         
