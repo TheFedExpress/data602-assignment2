@@ -1,4 +1,3 @@
-prettytable
-bs4
-lxml
-pandas
+pandas 
+numpy
+tkinter
