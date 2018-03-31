@@ -272,8 +272,8 @@ class UserAccount:
 class UserDB:
     def __init__(self):
         from pymongo import MongoClient
-        client = MongoClient('localhost', 27017)
-        self.db = client.account
+        client = MongoClient('mongodb://cuny:data@ds153958.mlab.com:53958/currency-app', connectTimeoutMS = 50000)
+        self.db = client.get_database('currency-app')
         if self.db.pl.count() > 0:
             self.new_account = 0
         else:
