@@ -1,4 +1,5 @@
 FROM python:3.6
+FROM mongo:latest
 WORKDIR /usr/src/app
 COPY requirements.txt ./
 RUN pip install --upgrade pip
