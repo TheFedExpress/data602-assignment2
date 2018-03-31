@@ -1,0 +1,4 @@
+prettytable
+bs4
+lxml
+pandas
