@@ -1,7 +1,7 @@
 FROM python:3.6
 ENV DISPLAY :0
 WORKDIR /usr/src/app
-
+RUN useradd -m docker 
 COPY requirements.txt ./
 RUN pip install --upgrade pip
 RUN pip install --no-cache-dir -r requirements.txt
