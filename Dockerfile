@@ -1,13 +1,5 @@
-FROM debian
-RUN apt-get update
-RUN apt-get install -qqy x11-apps
+FROM python:3.6
 ENV DISPLAY :0
-CMD xeyes
-
-XSOCK=/tmp/.X11-unix
-XAUTH=/tmp/.docker.xauth
-xauth nlist :0 | sed -e 's/^..../ffff/' | xauth -f $XAUTH nmerge -
-docker run -ti -v $XSOCK:$XSOCK -v $XAUTH:$XAUTH -e XAUTHORITY=$XAUTH xeyes
 WORKDIR /usr/src/app
 
 COPY requirements.txt ./
