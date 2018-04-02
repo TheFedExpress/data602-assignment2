@@ -122,6 +122,7 @@ class UserAccount:
                     db.pl_update(self.pl, 'cash')
                     db.pl_insert(self.pl, ticker)
                     db.blotter_insert(date, trans)
+                    self.message = "Success"
                 
        else:#sell/short      
             #simplified margin system only based on cash
@@ -190,6 +191,7 @@ class UserAccount:
                      'allocation_by_dollars', 'allocation_by_shares']] = (-shares, 0, price, 0, 0, -shares*price, 0, 0)
                    db.pl_insert(self.pl, ticker)
                    db.pl_update(self.pl, 'cash')
+                   self.message = "Success"
 
 
                 
