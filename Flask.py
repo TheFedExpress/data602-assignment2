@@ -5,7 +5,7 @@ Created on Sat Mar 17 13:21:03 2018
 @author: pgood
 """
 
-from flask import Flask, render_template, request, jsonify
+from flask import Flask, render_template, request, jsonify, make_response, send_file, Markup
 
 from user_account import UserAccount
 from user_account import UserDB
@@ -21,7 +21,13 @@ def index():
 
 @app.route("/blotter")
 def blotter():
-    return render_template('blotter.html')
+    account.showBlotter()
+    if account.blotter_rows < 1:
+        html = "You haven't made any transactions yet!"
+    else:
+        html = account.blotter_view.to_html(index = False)
+    return render_template('blotter.html', table = html)
+    
 
 @app.route("/pl")
 def pl():
@@ -34,11 +40,20 @@ def trade():
 
 @app.route('/stats', methods = ['POST'])
 def show_stats():
-    from get_currency_info import get_24
+    from get_currency_info import get_24 
     ticker =  request.form['ticker']
     mean, min, max, stdev = get_24(ticker)
+    return jsonify(mean=mean, min=min, max=max, stdev=stdev)
 
-    return jsonify(mean=mean, min=min, max=max, stdev=stdev)  
+@app.route('/graph', methods = ['POST'])
+def show_graph():
+    from plotly.offline import plot
+    from get_currency_info import make_chart
+    ticker = request.form['ticker'] 
+    data = make_chart(ticker)
+    plot(data, filename='file.html')
+    return ''
+
 
 @app.route ('/preview', methods = ['POST'])
 def preview_trade():

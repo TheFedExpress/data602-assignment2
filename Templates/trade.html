@@ -1,6 +1,9 @@
 <!DOCTYPE html>
 <html>
+<head>
+<script src="https://d14fo0winaifog.cloudfront.net/plotly-basic.js"></script>
 <script>
+ 
     function loadPrice()
     {
         var req = new XMLHttpRequest()
@@ -19,6 +22,7 @@
 		    document.getElementById('min').innerHTML = response.min
 		    document.getElementById('max').innerHTML = response.max
 		    document.getElementById('stdev').innerHTML = response.stdev
+		    document.getElementById('graphdiv').innerHTML = response.graph
                 }
             }
         }
@@ -30,6 +34,35 @@
         req.send(postVars)
         
         return false
+    }
+
+    function loadGraph()
+    {
+        var req = new XMLHttpRequest()
+        req.onreadystatechange = function()
+        {
+            if (req.readyState == 4)
+            {
+                if (req.status != 200)
+                {
+                    //error handling code here
+                }
+                else
+                {
+		    
+		    document.getElementById('graphdiv').innerHTML = graph
+                }
+            }
+        }
+    
+        req.open('POST', '/graph')
+        req.setRequestHeader("Content-type", "application/x-www-form-urlencoded")
+        var tick = document.getElementById('ticker').value
+        var postVars = 'ticker='+tick
+        req.send(postVars)
+        
+        return false
+
     }
 
     function loadPreview()
@@ -48,6 +81,7 @@
                     var response = JSON.parse(req.responseText)
                     document.getElementById('current').innerHTML = response.current
 		    document.getElementById('total').innerHTML = response.total
+		    document.getElementById('tradebutton').disabled = false
                 }
             }
         }
@@ -79,6 +113,7 @@
                 {
                     var response = JSON.parse(req.responseText)
                     document.getElementById('result').innerHTML = response.message
+		    document.getElementById('tradebutton').disabled = true
 
                 }
             }
@@ -97,7 +132,6 @@
 
 
 </script>
-
 <style>
 .container{
 	width:900px;
@@ -118,7 +152,9 @@
 </style>
 
     
-</style>
+</head>
+
+<body>
 <center><h1>Trading Menu<h1></center>
 <div class = "container">
   <div class = "options">
@@ -126,7 +162,7 @@
           <legend>Trade Options</legend>
           <p>Enter Ticker:</p><br>
               <input type = 'text' id = 'ticker'><br><br>
-              <input type = 'submit' name = 'chart' onclick="return loadPrice()"><br><br>
+              <button type = 'submit' name = 'chart' onclick="return loadGraph()">Show Chart/Stats</button>  <br><br>
               <b>Choose Trade Type:</b><br><br>
               <input type = 'radio' name = 'tran_type' value = 'buy'>Buy<br>
               <input type = 'radio' name = 'tran_type' value = 'sell'>Sell<br>
@@ -138,7 +174,7 @@
       </fieldset>
   </div>
    <div class = 'graph'>
-   Graph goes here
+   	<div id = 'graphdiv'>Chart goes here</div>
    </div>
 </div>
   <div class = 'stats'>
@@ -158,8 +194,9 @@
             <legend>Finalize Trade</legend>
         <b>Current Price:</b> <span id = 'current'> </span><br>
         <b>Total Order Value:</b> <span id = 'total'> </span><br><br>
-        <button type = 'submit' name = 'maketrade' onclick = "return makeTrade()">Make Trade</button><br>
+        <button type = 'submit' name = 'maketrade' id = 'tradebutton' onclick = "return makeTrade()" disabled>Make Trade</button><br>
 	<span id = 'result'></span>
     </fieldset>
 </div>
+</body>
 </html>

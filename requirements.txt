@@ -1,4 +1,5 @@
 pandas 
 numpy
 pymongo
-matplotlib
+plotly
+flask

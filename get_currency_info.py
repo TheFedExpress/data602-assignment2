@@ -75,4 +75,25 @@ def get_24(ticker):
     formated = tuple(['${:,.2f}'.format(item) for item in stats])
     return formated
     
+def make_chart(ticker):
+    from plotly.graph_objs import Scatter, Data, Line
+    from plotly.offline import plot    
+    import requests
+    from datetime import datetime, timedelta
+    import pandas as pd
+    
+    ticker = ticker.upper()
+    url = 'https://min-api.cryptocompare.com/data/histoday?fsym={}&tsym=USDT&limit=119&aggregate=1'.format(ticker)
+    response = requests.get(url)
+    json_text = response.json()['Data']
+    df = pd.DataFrame(json_text, columns = ['time', 'low', 'high', 'open', 'close', 'volume'])
+    df.sort_values(by = ['time'], inplace = True)
+    dates = df['time'].map(datetime.fromtimestamp)
+    df['time'] = dates
+    labels = dates.map('{:%Y-%m-%d}'.format)[19:].values
+    df['moving'] = df['close'].rolling(window = 20).mean()
+    price = Scatter(x= labels, y = df.loc[19:, 'close'], line = Line(width = 2, color = 'blue'), name = ticker)
+    moving = Scatter(x= labels, y = df.loc[19:, 'moving'], line = Line(width = 2, color = 'orange'), name = 'Moving Avg')
+    data = Data([price, moving])
+    return data
     
