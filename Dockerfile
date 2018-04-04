@@ -1,4 +1,7 @@
-FROM python:3.6
+FROM python:alpine
+RUN apk update && apk upgrade
+RUN apk add --no-cache git
+
 WORKDIR /usr/src/app
 COPY requirements.txt ./
 RUN pip install --upgrade pip
