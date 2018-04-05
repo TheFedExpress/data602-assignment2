@@ -7,8 +7,9 @@ Created on Sat Feb 17 16:53:12 2018
 
 class User:
     
-    def __init__(self, db):
+    def __init__(self, db, starting = 100000000):
         self.currency = 'USDT'
+        self.starting_cash = starting
     
     #For fungible shares, it doesn't make sense to allow for simultaneous short and long positions
     #This would also require two lines on the P/L, causing confusion
@@ -75,6 +76,19 @@ class User:
                pl.eval_pl(tran_type, shares, price, ticker, total, db, new, prev_shares)
                blotter.eval_blotter(db, date, trans)
                self.message = "Success"
+    
+    def wipe_account(self, db, blotter, pl):
+        import pandas as pd
+        db.db.pl.delete_many({})
+        db.db.blotter.delete_many({})
+        blotter.blotter_rows = 0
+        blotter.blotter = pd.DataFrame(columns = [ "cash_balance", "currency", "net", "price",
+         "shares", "tran_type"])
+        start = {"cash": {"position": 0, "market": self.starting_cash, "wap" : 0.0, "rpl": 0.0, "upl": 0.0, "total_pl": 0.0,
+        "allocation_by_shares": 0.0, "allocation_by_dollars": 100.0}}
+        pl.pl = pd.DataFrame.from_dict(start, orient = 'index')
+        db.pl_insert(pl.pl, 'cash')
+        
 
 class Blotter:
     
@@ -129,11 +143,11 @@ class Blotter:
             
 class PL:
     
-    def __init__(self, user, db, starting = 100000000.0):
+    def __init__(self, user, db):
         import pandas as pd
         if db.new_account == 1:
-            start = {"cash": {"position": 0, "market": starting, "wap" : 0.0, "rpl": 0.0, "upl": 0.0, "total_pl": 0.0,
-                                           "allocation_by_shares": 0.0, "allocation_by_dollars": 100.0}}
+            start = {"cash": {"position": 0, "market": user.starting_cash, "wap" : 0.0, "rpl": 0.0, "upl": 0.0, 
+                              "tpl": 0.0, "allocation_by_shares": 0.0, "allocation_by_dollars": 100.0}}
             self.pl = pd.DataFrame.from_dict(start, orient = 'index')
             db.pl_insert(self.pl, 'cash')
         else:
@@ -176,7 +190,7 @@ class PL:
                 db.pl_update(self.pl, ticker)
                 db.pl_update(self.pl, 'cash')
             else:
-                self.pl.loc[ticker, ['position', 'market', 'wap', 'rpl', 'upl', 'total_pl', 
+                self.pl.loc[ticker, ['position', 'market', 'wap', 'rpl', 'upl', 'tpl', 
                      'allocation_by_dollars', 'allocation_by_shares']] = (shares, 0, price, 0, 0, shares*price, 0, 0)
 
                 db.pl_insert(self.pl, ticker)
@@ -206,7 +220,7 @@ class PL:
                db.pl_update(self.pl, ticker)
                db.pl_update(self.pl, 'cash')
            else:
-               self.pl.loc[ticker, ['position', 'market', 'wap', 'rpl', 'upl', 'total_pl', 
+               self.pl.loc[ticker, ['position', 'market', 'wap', 'rpl', 'upl', 'tpl', 
                  'allocation_by_dollars', 'allocation_by_shares']] = (-shares, 0, price, 0, 0, -shares*price, 0, 0)
                db.pl_insert(self.pl, ticker)
                db.pl_update(self.pl, 'cash')
@@ -228,11 +242,12 @@ class PL:
         cash = self.pl.loc['cash', 'market']
         
         df["total_value"] = df.position * df.market
+
         df['share_weight'] =  abs(df.position)/np.sum(abs(df.position))
         df['value_weight'] = abs(df['total_value'])/np.sum(abs(df['total_value']))
         upl = df.position * df.market - df.position * df.wap
-        df["upl"] = upl
-        
+        df.loc["upl"] = upl
+        df.loc['tpl'] = df.upl + df.rpl        
         df.fillna(0)
         df.replace(np.nan, 0, inplace=True)
         
@@ -240,22 +255,21 @@ class PL:
         currencies = final_df.index
         final_df['currency'] = currencies
         final_df = df[['currency', "position", "market", "total_value", 'value_weight', 'share_weight', "wap", "upl", 
-                       "rpl"]]
-        
-        
+                      'tpl',  "rpl"]]
                     
         #total row
         val = cash + np.sum(final_df["total_value"])
-        totals = ['Total', '', '',  val,'', '', '', np.sum(final_df["upl"]), np.sum(final_df["rpl"])]
+        totals = ['Total', '', '',  val,'', '', '', np.sum(final_df["upl"]), np.sum(final_df["rpl"]),
+                  np.sum(final_df["tpl"])]
         for item in range(len(totals)):
             if type(totals[item]) is not str:
                 totals[item] = "${:,.2f}".format(totals[item]) 
                 
         totals = tuple(totals)
-        cash_row = ("Cash", '', '', "${:,.2f}".format(cash),'', '',  '', '','')
-        space_row = tuple(['' for i in range(9)])
+        cash_row = ("Cash", '', '', "${:,.2f}".format(cash),'', '',  '', '','', '')
+        space_row = tuple(['' for i in range(len(final_df.columns))])
         
-        for item in ["market", "total_value", "wap", "upl", "rpl"]:
+        for item in ["market", "total_value", "wap", "upl", "rpl", 'tpl']:
             final_df[item] = final_df[item].map('${:,.2f}'.format)
         for item in ['value_weight', 'share_weight']:
             final_df[item] = (final_df[item]*100).map('{:,.0f}%'.format)
@@ -267,7 +281,7 @@ class PL:
         final_df.loc[rows + 2] = totals
             
         cols = ['Currency', "Position", "Market Price", "Total Value", 'Value Weight', 'Share Weight',
-                "WAP", "UPL", "RPL"]
+                "WAP", "UPL", "RPL", 'Total PL']
         
         
         final_df.columns = cols
