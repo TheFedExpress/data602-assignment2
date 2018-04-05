@@ -1,7 +1,29 @@
 <!DOCTYPE html>
 <html>
+	<head>
+	<style>
+	table {
+   	 font-family: arial, sans-serif;
+    	border-collapse: collapse;
+    	width: 100%;
+	}
+
+	td {
+    	border: 1px solid #dddddd;
+    	text-align: left;
+    	padding: 8px;
+	}
+
+	tr:nth-child(odd) {
+    	background-color: #dddddd;
+	}
+	</style>
+	</head>
+	<body>
+
 	<center><h1>P/L</h1></center>
-	<p>
+	
 		{{table | safe}}
-	</p>
+	</body>
+	
 </html>

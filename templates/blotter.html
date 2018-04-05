@@ -1,7 +1,44 @@
 <!DOCTYPE html>
 <html>
+<head>
+<style>
+table {
+    font-family: arial, sans-serif;
+    border-collapse: collapse;
+    width: 100%;
+}
+
+td {
+    border: 1px solid #dddddd;
+    text-align: left;
+    padding: 8px;
+}
+
+tr:nth-child(odd) {
+    background-color: #dddddd;
+}
+fieldset{
+	width: 800px;
+    
+}
+title{
+	font-size: 300%;
+}
+a {
+  font: bold 11px Arial;
+  font-size: 120%;
+  text-decoration: none;
+  background-color: black;
+  color: white;
+  padding: 2px 6px 2px 6px;
+}
+
+</style>
+</head>
+<body>
 	<center><h1>Blotter</h1></center>
 	<p>
 		<center>{{table | safe}}</center>
 	</p>
+</body>
 </html>
