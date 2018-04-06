@@ -36,32 +36,7 @@ def get_current(ticker, trade_type):
         return bid
     elif trade_type == 'check':
         return(bid, ask, last)
-
-   
-def get_charts(ticker):
-    import requests
-    from datetime import datetime, timedelta
-    import matplotlib.pyplot as plt
-    import pandas as pd
-    start = datetime.now() - timedelta(days = 120)
-    end = datetime.now()
-    url = 'https://min-api.cryptocompare.com/data/histoday?fsym={}&tsym=USDT&limit=120&aggregate=1'.format(ticker.upper())
-    response = requests.get(url)
-    json_text = response.json()['Data']
-    df = pd.DataFrame(json_text, columns = ['time', 'low', 'high', 'open', 'close', 'volume'])
-    df.sort_values(by = ['time'], inplace = True)
-    dates = df['time'].map(datetime.fromtimestamp)
-    df['time'] = dates
-    plot = plt.plot('time', 'close', data = df.iloc[19:119, :])
-    plt.title('{} to USD (last 100 days)'.format(ticker))
-    plt.ylabel('{} Price (USD)'.format(ticker.upper()))
-    plt.xlabel('Date')
-    labels = dates.map('{:%Y-%m-%d}'.format)[19:119:5].values
-    plt.xticks(labels, labels, rotation = 45)
-    df['moving'] = df['close'].rolling(window = 20).mean()
-    plt.plot('time', 'moving', data = df)
-    plt.title('{} Price History'.format(ticker.upper()))
-    plt.legend()
+        
 
 def get_24(ticker):
     import requests
@@ -75,6 +50,7 @@ def get_24(ticker):
     formated = tuple(['${:,.2f}'.format(item) for item in stats])
     return formated
     
+
 def make_chart(ticker):
     from plotly.graph_objs import Scatter, Data, Line
     from plotly.offline import plot    

@@ -84,10 +84,14 @@ class User:
         blotter.blotter_rows = 0
         blotter.blotter = pd.DataFrame(columns = [ "cash_balance", "currency", "net", "price",
          "shares", "tran_type"])
-        start = {"cash": {"position": 0, "market": self.starting_cash, "wap" : 0.0, "rpl": 0.0, "upl": 0.0, "total_pl": 0.0,
+        start = {"cash": {"position": 0, "market": self.starting_cash, "wap" : 0.0, "rpl": 0.0, "upl": 0.0, "tpl": 0.0,
         "allocation_by_shares": 0.0, "allocation_by_dollars": 100.0}}
         pl.pl = pd.DataFrame.from_dict(start, orient = 'index')
         db.pl_insert(pl.pl, 'cash')
+        self.currency = 'USDT'
+        
+    def change_currency(self, ticker):
+        self.currency = ticker
         
 
 class Blotter:
@@ -121,9 +125,20 @@ class Blotter:
                 self.blotter = pd.DataFrame(columns = [ "cash_balance", "currency", "net", "price",
                                  "shares", "tran_type"])
                 
-    def showBlotter(self):
+    def showBlotter(self, user):
+        from get_currency_info import get_current
         if self.blotter_rows > 0:
+            if user.currency != 'USDT':
+                bid, ask, cur = get_current(user.currency, 'check')
+                mult = 1/cur
+                #Going from dollars to the currency, intead of directly to from currency
+                #to prevents the problem of certain currencies pairs not trading.
+                #It also makes the program neater for such a minor difference, since this is
+                #only for display purposes.
+            else:
+                mult = 1
             df = self.blotter.copy()
+            df.loc[:, ['price', 'net', 'cash_balance']] *= mult
             df["price"] = df["price"].map('${:,.2f}'.format)
             df["net"] = df["net"].map('${:,.2f}'.format)
             df["cash_balance"] = df["cash_balance"].map('${:,.2f}'.format)
@@ -131,10 +146,13 @@ class Blotter:
             df['Transaction Date'] = dates
             
             df = df[['Transaction Date', "currency", "price", "shares", "tran_type", "net", "cash_balance"]]
+            print(df)
+            
             labels = ["Transaction Date", "Currency", "Price", "Shares Traded", "Transaction Type",
                       "Net Cash Flow", "Cash Balance"]
             df.columns = labels
             self.blotter_view = df
+            
     def eval_blotter(self, db, date, trans):
            self.blotter.loc[date] = trans
            db.blotter_insert(date, trans)
@@ -191,7 +209,7 @@ class PL:
                 db.pl_update(self.pl, 'cash')
             else:
                 self.pl.loc[ticker, ['position', 'market', 'wap', 'rpl', 'upl', 'tpl', 
-                     'allocation_by_dollars', 'allocation_by_shares']] = (shares, 0, price, 0, 0, shares*price, 0, 0)
+                     'allocation_by_dollars', 'allocation_by_shares']] = (shares, 0, price, 0, 0, 0, 0, 0)
 
                 db.pl_insert(self.pl, ticker)
                 db.pl_update(self.pl, 'cash')
@@ -228,35 +246,38 @@ class PL:
 
 
            
-    def showPL(self):
+    def showPL(self, user):
         import numpy as np
         from get_currency_info import get_current
-        
-        df = self.pl.copy()[self.pl.index != 'cash']
+        if user.currency != 'USDT':
+            bid, ask, cur = get_current(user.currency, 'check')
+            mult = 1/cur
+        else:
+            mult = 1
+        final_df = self.pl.copy()[self.pl.index != 'cash']
         #create a datafram from positions for easy calculated columns
         markets = []
-        for position in df.index.values:
+        for position in final_df.index.values:
             bid, ask, market = get_current(position, 'check')
             markets.append(market)
-        df["market"] = markets
-        cash = self.pl.loc['cash', 'market']
+        final_df["market"] = markets
+        cash = self.pl.loc['cash', 'market'] * mult
         
-        df["total_value"] = df.position * df.market
+        final_df["total_value"] = final_df.position * final_df.market
 
-        df['share_weight'] =  abs(df.position)/np.sum(abs(df.position))
-        df['value_weight'] = abs(df['total_value'])/np.sum(abs(df['total_value']))
-        upl = df.position * df.market - df.position * df.wap
-        df.loc["upl"] = upl
-        df.loc['tpl'] = df.upl + df.rpl        
-        df.fillna(0)
-        df.replace(np.nan, 0, inplace=True)
+        final_df.loc[:, 'share_weight'] =  abs(final_df.position)/np.sum(abs(final_df.position))
+        final_df.loc[:, 'value_weight'] = abs(final_df['total_value'])/np.sum(abs(final_df['total_value']))
+        upl = final_df.position * final_df.market - final_df.position * final_df.wap
+        final_df.loc[:, "upl"] = upl
+        final_df.loc[:, 'tpl'] = final_df.upl + final_df.rpl        
+        final_df.fillna(0)
+        final_df.replace(np.nan, 0, inplace=True)
         
-        final_df = df
         currencies = final_df.index
         final_df['currency'] = currencies
-        final_df = df[['currency', "position", "market", "total_value", 'value_weight', 'share_weight', "wap", "upl", 
-                      'tpl',  "rpl"]]
-                    
+        final_df = final_df[['currency', "position", "market", "total_value", 'value_weight', 'share_weight', "wap", "upl", 
+                      'rpl',  "tpl"]]
+        final_df.loc[:, ['tpl', 'market', 'rpl', 'total_value', 'wap', 'upl']] *= mult
         #total row
         val = cash + np.sum(final_df["total_value"])
         totals = ['Total', '', '',  val,'', '', '', np.sum(final_df["upl"]), np.sum(final_df["rpl"]),

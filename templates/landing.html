@@ -1,6 +1,32 @@
 <!DOCTYPE html>
 <html>
 <head>
+<script>
+   function changeBase()
+    {
+        var req = new XMLHttpRequest()
+        req.onreadystatechange = function()
+        {
+            if (req.readyState == 4)
+            {
+                if (req.status != 200)
+                {
+                    //error handling code here
+                }
+                else
+			 document.getElementById('cur_result').innerHTML = 'Currency Changed'
+                {
+                    
+                }
+            }
+        }
+
+        req.open('GET', '/?currency=BTC', true);
+	req.send()
+    }
+
+
+</script>
 <style>
 table {
     font-family: arial, sans-serif;
@@ -32,6 +58,12 @@ a {
   color: white;
   padding: 2px 6px 2px 6px;
 }
+.user_options{
+	text-align:right;
+	font: bold 11px Arial;
+    	float: right;
+	bottom: 0;
+}
 
 </style>
 </head>
@@ -43,7 +75,7 @@ a {
   	<legend>Main Menu</legend>
   	  <table class = 'links'>
       <tr> 
-      	<td><li><a href= "trade">Trade</button></a></td></li></td> 
+      	<td><li><a href= "trade">Trade</a></td></li></td> 
         <td><p>Lookup pricing data, and trade currencies</p></td>
        </tr>
       <tr>
@@ -57,6 +89,26 @@ a {
       </table>
   </fieldset>
   </center>
+  	 <div class = 'user_options'>
+  	<fieldset style = 'width:200px'>
+      <legend>User Options</legend>
+
+      Choose PL/Blotter Display Currency:<br><br>
+      <form>
+      <input type = 'radio' name = 'cur' value = 'USDT'>USD<br>
+      <input type = 'radio' name = 'cur' value = 'BTC'>BTC<br>
+      <input type = 'radio' name = 'cur' value = 'ETH'>ETH<br>
+      <input type = 'radio' name = 'cur' value = 'LTC'>LTC<br><br>
+      <button type = 'submit' name = 'cur_button' action = '/'>Change Currency</button><br>
+      </form>
+      <br><br>
+      Start Over?<br><br>
+      <form>
+       <input type="checkbox" name="wipe" value="yes">Yes<br>
+      <button type = 'submit' name = 'wipe_button' action = '/'>Wipe Account</button>
+      </form>
+    </fieldset>
+      </div>	
 
 
 </body>

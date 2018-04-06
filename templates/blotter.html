@@ -17,6 +17,11 @@ td {
 tr:nth-child(odd) {
     background-color: #dddddd;
 }
+th{
+    border: 1px solid #dddddd;
+    text-align: center;
+    padding: 8px;	
+}
 fieldset{
 	width: 800px;
     
@@ -37,8 +42,9 @@ a {
 </head>
 <body>
 	<center><h1>Blotter</h1></center>
-	<p>
 		<center>{{table | safe}}</center>
-	</p>
+	
+	<br><br>
+	<a href = '/'>Home</a>
 </body>
 </html>

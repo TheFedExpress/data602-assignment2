@@ -7,32 +7,38 @@ Created on Sat Mar 17 13:21:03 2018
 
 from flask import Flask, render_template, request, jsonify, make_response, send_file, Markup
 
-from user_account import UserAccount
-from user_account import UserDB
-
-db = UserDB()
-account = UserAccount(db)
+from user_accountv2 import User, Blotter, PL, UserDB
+my_db = UserDB()
+account = User(my_db)
+my_pl = PL(account, my_db)
+my_blotter = Blotter(account, my_db)
 
 app = Flask(__name__)
  
 @app.route("/")
 def index():
+    currency = request.args.get('cur')
+    wipe = request.args.get('wipe')
+    if currency != None:
+        account.change_currency(currency)
+    if wipe == 'yes':
+        account.wipe_account(my_db, my_blotter, my_pl)
     return render_template('landing.html')
 
 @app.route("/blotter")
 def blotter():
-    account.showBlotter()
-    if account.blotter_rows < 1:
+    my_blotter.showBlotter(account)
+    if my_blotter.blotter_rows < 1:
         html = "You haven't made any transactions yet!"
     else:
-        html = account.blotter_view.to_html(index = False)
+        html = my_blotter.blotter_view.to_html(index = False)
     return render_template('blotter.html', table = html)
     
 
 @app.route("/pl")
 def pl():
-    account.showPL()
-    return render_template('pl.html', table = account.pl_view.to_html(index = False))
+    my_pl.showPL(account)
+    return render_template('pl.html', table = my_pl.pl_view.to_html(index = False))
 
 @app.route("/trade")
 def trade():
@@ -43,16 +49,19 @@ def show_stats():
     from get_currency_info import get_24 
     ticker =  request.form['ticker']
     mean, min, max, stdev = get_24(ticker)
-    return jsonify(mean=mean, min=min, max=max, stdev=stdev)
+    return jsonify(stdev=stdev, mean=mean, min=min, max=max)
 
-@app.route('/graph', methods = ['POST'])
+@app.route('/graph')
 def show_graph():
     from plotly.offline import plot
     from get_currency_info import make_chart
-    ticker = request.form['ticker'] 
-    data = make_chart(ticker)
-    plot(data, filename='file.html')
-    return ''
+    ticker = request.args.get('ticker')
+    if ticker != None:
+        data = make_chart(ticker)
+        my_plot = plot(data, output_type="div", show_link=False)
+    else:
+        my_plot = ''
+    return render_template('graph.html', my_plot = my_plot)
 
 
 @app.route ('/preview', methods = ['POST'])
@@ -79,7 +88,7 @@ def executeTrade():
     trade_type = request.form['type']
     shares = float(request.form['shares'])
     price = get_current(ticker, trade_type)
-    account.evalTransaction(trade_type, shares, price, ticker, db)
+    account.evalTransaction(trade_type, shares, price, ticker, my_db, my_pl, my_blotter)
     if account.message == 'Success':
         return(jsonify(message = 'Order Success! {}@${:,.2f}'.format(ticker, price)))
     else: 
