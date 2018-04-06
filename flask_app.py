@@ -46,53 +46,60 @@ def trade():
 
 @app.route('/stats', methods = ['POST'])
 def show_stats():
-    from get_currency_info import get_24 
+    from get_currency_info import get_24, find_actives
     ticker =  request.form['ticker']
-    mean, min, max, stdev = get_24(ticker)
-    return jsonify(stdev=stdev, mean=mean, min=min, max=max)
+    if ticker.upper() in find_actives():
+        stdev, min, max, mean = get_24(ticker)
+        return jsonify(stdev=stdev, mean=mean, min=min, max=max)
+    else:
+        return jsonify(stdev = 'Ticker not found', mean = '', min = '', max = '')
 
 @app.route('/graph')
 def show_graph():
     from plotly.offline import plot
-    from get_currency_info import make_chart
+    from get_currency_info import make_chart, find_actives
     ticker = request.args.get('ticker')
     if ticker != None:
-        data = make_chart(ticker)
-        my_plot = plot(data, output_type="div", show_link=False)
+        if ticker.upper() in find_actives():
+            data = make_chart(ticker)
+            my_plot = plot(data, output_type="div", show_link=False)
+        else:
+            my_plot = 'Ticker not found'
     else:
-        my_plot = ''
+        my_plot = 'Ticker not found'
     return render_template('graph.html', my_plot = my_plot)
 
 
 @app.route ('/preview', methods = ['POST'])
 def preview_trade():
-    from get_currency_info import get_current
+    from get_currency_info import get_current, find_actives
     ticker = request.form['ticker']
     trade_type = request.form['type']
     shares = request.form['shares']
-    
-    cur = get_current(ticker, trade_type)
-    cur_format = "${:,.2f}".format(cur)
-            
-    try:
+    if ticker.upper() in find_actives():
+        cur = get_current(ticker, trade_type)
+        cur_format = "${:,.2f}".format(cur)
         tot = cur * float(shares)
         tot_format = "${:,.2f}".format(tot)
         return (jsonify(current = cur_format, total = tot_format))
-    except ValueError:
-        pass
+    else:
+        return jsonify(current = 'Ticker not found', total = '')
 
 @app.route('/execute', methods = ['POST'])
 def executeTrade():
-    from get_currency_info import get_current
+    from get_currency_info import get_current, find_actives
     ticker = request.form['ticker'].upper()
     trade_type = request.form['type']
     shares = float(request.form['shares'])
-    price = get_current(ticker, trade_type)
-    account.evalTransaction(trade_type, shares, price, ticker, my_db, my_pl, my_blotter)
-    if account.message == 'Success':
-        return(jsonify(message = 'Order Success! {}@${:,.2f}'.format(ticker, price)))
-    else: 
-        return(jsonify(message = account.message))
+    if ticker in find_actives():
+        price = get_current(ticker, trade_type)
+        account.evalTransaction(trade_type, shares, price, ticker, my_db, my_pl, my_blotter)
+        if account.message == 'Success':
+            return(jsonify(message = 'Order Success! {}@${:,.2f}'.format(ticker, price)))
+        else: 
+            return(jsonify(message = account.message))
+    else:
+        return(jsonify(message = 'Ticker not found'))
         
 
         

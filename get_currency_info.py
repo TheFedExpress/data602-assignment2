@@ -72,4 +72,13 @@ def make_chart(ticker):
     moving = Scatter(x= labels, y = df.loc[19:, 'moving'], line = Line(width = 2, color = 'orange'), name = 'Moving Avg')
     data = Data([price, moving])
     return data
-    
+
+def find_actives():
+    import requests
+    import pandas as pd
+    url = 'https://bittrex.com/api/v1.1/public/getcurrencies'
+    response = requests.get(url)
+    obj = response.json()['result']
+    df = pd.DataFrame(obj)
+    actives = df[df.IsActive == True]['Currency'].values
+    return actives
