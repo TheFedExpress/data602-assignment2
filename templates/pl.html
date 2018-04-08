@@ -11,33 +11,40 @@
   	padding: 2px 6px 2px 6px;
 	}
 
-	table {
-   	 font-family: arial, sans-serif;
-    	border-collapse: collapse;
-    	width: 100%;
-	}
+table {
+    font-family: arial, sans-serif;
+    border-collapse: collapse;
+    width: 100%;
+}
 
-	td {
-    	border: 1px solid #dddddd;
-    	text-align: left;
-    	padding: 8px;
-	}
-	th{
-    	border: 1px solid #dddddd;
-    	text-align: center;
-    	padding: 8px;	
-	}
-	tr:nth-child(odd) {
-    	background-color: #dddddd;
-	}
+td {
+    border: 1px solid #aaaaaa;
+    text-align: left;
+    padding: 8px;
+}
+
+tr:nth-child(even) {
+    background-color: #dddddd;
+}
+th{
+    border: 2px solid #aaaaaa;
+    text-align: center;
+    padding: 12px;
+    font-weight: bold;	
+}
+.cur{
+	font: bold 10px Arial;
+	float: right;
+}
 	</style>
 	</head>
 	<body>
 
 	<center><h1>P/L</h1></center>
-	
+
 		{{table | safe}}
 	<br><br>
+	<div class = 'cur'>Currency: {{currency | safe}}</div>
 	<a href = '/'>Home</a>
 	</body>
 	

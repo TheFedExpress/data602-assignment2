@@ -11,21 +11,15 @@
         {
             if (req.readyState == 4)
             {
-                if (req.status != 200)
-                {
-                    //error handling code here
-                }
-                else
-                {
+                if (req.status == 200){
                     var response = JSON.parse(req.responseText)
                     document.getElementById('mean').innerHTML = response.mean
 		    document.getElementById('min').innerHTML = response.min
 		    document.getElementById('max').innerHTML = response.max
 		    document.getElementById('stdev').innerHTML = response.stdev
-		    document.getElementById('graphdiv').innerHTML = response.graph
                 }
             }
-        }
+	}
     
         req.open('POST', '/stats')
         req.setRequestHeader("Content-type", "application/x-www-form-urlencoded")
@@ -49,16 +43,14 @@
         {
             if (req.readyState == 4)
             {
-                if (req.status != 200)
-                {
-                    //error handling code here
-                }
-                else
+                if (req.status == 200)
                 {
                     var response = JSON.parse(req.responseText)
                     document.getElementById('current').innerHTML = response.current
 		    document.getElementById('total').innerHTML = response.total
-		    document.getElementById('tradebutton').disabled = false
+		    if (response.total != ''){
+		    	document.getElementById('tradebutton').disabled = false
+		    }
                 }
             }
         }
@@ -82,15 +74,20 @@
         {
             if (req.readyState == 4)
             {
-                if (req.status != 200)
-                {
-                    //error handling code here
-                }
-                else
+                if (req.status == 200)
                 {
                     var response = JSON.parse(req.responseText)
                     document.getElementById('result').innerHTML = response.message
 		    document.getElementById('tradebutton').disabled = true
+		    var items = ['shares', 'ticker', 'current', 'total', 'min', 'mean', 'max', 'stdev']
+		    for (var i = 0; i < 8; i++){
+			if (i < 2){
+		    		document.getElementById(items[i]).value = ''
+			}
+			else{
+				document.getElementById(items[i]).innerHTML = ''
+			}
+		    }
 
                 }
             }
@@ -110,15 +107,20 @@
 
 </script>
 <style>
+div{
+	font-family: arial, sans-serif;
+}
+
+
 .container{
-	width:600px;
+	width:625px;
 }
 .options{
 	float:left;
 	width:300px;
 }
 .stats{
-	width:250px;
+	width:290px;
     float:left;
 }
 a {
@@ -142,7 +144,12 @@ a {
       <fieldset>
           <legend>Trade Options</legend>
           <p>Enter Ticker:</p><br>
-              <input type = 'text' id = 'ticker'><br><br>
+              <input type = 'text' id = 'ticker' list = 'ticker_list'><br><br>
+	      <datalist id = 'ticker_list'>
+	      {% for ticker in ticker_list %}
+			{{ticker | safe}}
+	      {% endfor %}
+	      </datalist>
               <button type = 'button' id = 'chart' onclick = 'return loadGraph()'>Show Chart</button>  
 	       <button type = 'button' id = 'stats' onclick = 'return loadPrice()'>Show Stats</button><br><br>
               <b>Choose Trade Type:</b><br><br>

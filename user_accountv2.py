@@ -7,17 +7,22 @@ Created on Sat Feb 17 16:53:12 2018
 
 class User:
     
-    def __init__(self, db, starting = 100000000):
-        self.currency = 'USDT'
+    def __init__(self, db, starting = 100000000.0):
+        if db.new_account == 0:
+            self.currency = db.db.cur.find_one({'currency' : {'$exists' : True}})['currency']
+        else:
+            self.currency = 'USDT'
         self.starting_cash = starting
+        
     
     #For fungible shares, it doesn't make sense to allow for simultaneous short and long positions
     #This would also require two lines on the P/L, causing confusion
     def evalTransaction(self, tran_type, shares, price, ticker, db, pl, blotter):
        from datetime import datetime
+       
        cash = pl.pl.loc['cash', 'market']
        total = shares * price
-       cash = pl.pl.loc['cash', 'market']
+       
        try:
             prev_shares = pl.pl.loc[ticker, "position"]
             new = 0
@@ -44,17 +49,13 @@ class User:
                 
             else:#Process transaction
                 date = datetime.now ()
-                trans = (cash,  ticker, -total, price, shares, tran_type)
+                trans = (cash - total,  ticker, -total, price, shares, tran_type)
+                print(trans)
                 pl.eval_pl(tran_type, shares, price, ticker, total, db, new, prev_shares)
                 blotter.eval_blotter(db, date, trans)
                 self.message = "Success"
                 
-       else:#sell/short      
-            #simplified margin system only based on cash
-            #no margin calls either
-            #I could have used the dataframe calcs from the showPL method to calculate total equity, but
-            #that requires getting the market price from the whole portfolio, and that would slow down
-            #the app
+       else:
             if tran_type == "short":
                 margin = pl.check_margin()
                                  
@@ -70,42 +71,55 @@ class User:
                 
             elif tran_type == "short" and cash <= (margin * 2 + shares * price):
                 self.message = "This transaction requires ${:,.2f} in your account.  You have ${:,.2f}."
-            else:
+                
+            else:#Process transaction
                date = datetime.now ()
-               trans = (cash,  ticker, total, price, shares, tran_type)
+               trans = (cash + total,  ticker, total, price, shares, tran_type)
                pl.eval_pl(tran_type, shares, price, ticker, total, db, new, prev_shares)
                blotter.eval_blotter(db, date, trans)
                self.message = "Success"
     
     def wipe_account(self, db, blotter, pl):
         import pandas as pd
+        #reset db
         db.db.pl.delete_many({})
         db.db.blotter.delete_many({})
+        db.db.cur.delete_many({})
+        db.currency_update('usdt')
+        #reset blotter
         blotter.blotter_rows = 0
         blotter.blotter = pd.DataFrame(columns = [ "cash_balance", "currency", "net", "price",
          "shares", "tran_type"])
+    
+        #reset pl
         start = {"cash": {"position": 0, "market": self.starting_cash, "wap" : 0.0, "rpl": 0.0, "upl": 0.0, "tpl": 0.0,
         "allocation_by_shares": 0.0, "allocation_by_dollars": 100.0}}
         pl.pl = pd.DataFrame.from_dict(start, orient = 'index')
         db.pl_insert(pl.pl, 'cash')
+        
+        #reset user
         self.currency = 'USDT'
+        db.db.cur.insert_one({'currency' : 'USDT'})
         
-    def change_currency(self, ticker):
+    def change_currency(self, ticker, db):
         self.currency = ticker
-        
+        db.currency_update(ticker)
 
 class Blotter:
     
     def __init__(self, user, db):
         import pandas as pd
         from datetime import datetime
+        
         if db.new_account == 1:
             self.blotter_rows = 0
             self.blotter = pd.DataFrame(columns = [ "cash_balance", "currency", "net", "price",
                                  "shares", "tran_type"])
+    
         else:
             self.blotter_rows = db.db.blotter.count()
             if self.blotter_rows > 0:
+                #recreate blotter from last session
                 blotter_list = []
                 blotter_recs = db.db.blotter.find({})
                 for rec in blotter_recs:
@@ -117,11 +131,10 @@ class Blotter:
                             else:
                                 record_dict[key] = rec[key]
                     blotter_list.append(record_dict)
-                            
                 self.blotter = pd.DataFrame(blotter_list)
                 self.blotter.set_index('date', inplace=True)
 
-            else:
+            else:#new blotter with no rows
                 self.blotter = pd.DataFrame(columns = [ "cash_balance", "currency", "net", "price",
                                  "shares", "tran_type"])
                 
@@ -129,7 +142,7 @@ class Blotter:
         from get_currency_info import get_current
         if self.blotter_rows > 0:
             if user.currency != 'USDT':
-                bid, ask, cur = get_current(user.currency, 'check')
+                cur = get_current(user.currency, 'check')
                 mult = 1/cur
                 #Going from dollars to the currency, intead of directly to from currency
                 #to prevents the problem of certain currencies pairs not trading.
@@ -137,6 +150,7 @@ class Blotter:
                 #only for display purposes.
             else:
                 mult = 1
+            #prepare for display
             df = self.blotter.copy()
             df.loc[:, ['price', 'net', 'cash_balance']] *= mult
             df["price"] = df["price"].map('${:,.2f}'.format)
@@ -146,7 +160,6 @@ class Blotter:
             df['Transaction Date'] = dates
             
             df = df[['Transaction Date', "currency", "price", "shares", "tran_type", "net", "cash_balance"]]
-            print(df)
             
             labels = ["Transaction Date", "Currency", "Price", "Shares Traded", "Transaction Type",
                       "Net Cash Flow", "Cash Balance"]
@@ -163,12 +176,14 @@ class PL:
     
     def __init__(self, user, db):
         import pandas as pd
+        
         if db.new_account == 1:
             start = {"cash": {"position": 0, "market": user.starting_cash, "wap" : 0.0, "rpl": 0.0, "upl": 0.0, 
                               "tpl": 0.0, "allocation_by_shares": 0.0, "allocation_by_dollars": 100.0}}
             self.pl = pd.DataFrame.from_dict(start, orient = 'index')
             db.pl_insert(self.pl, 'cash')
-        else:
+            
+        else: #recreate pl from last session
             pl_recs = db.db.pl.find({})
             pl_dict = {}
             for rec in pl_recs:
@@ -179,6 +194,7 @@ class PL:
     
     def check_margin(self):
         from get_currency_info import get_current
+        
         margin = 0
         for currency in self.pl.index:
             if self.pl.loc[currency, "position"] < 0:
@@ -186,11 +202,18 @@ class PL:
         return margin
     
     def eval_pl(self, tran_type, shares, price, ticker, total, db, new, prev_shares):
+        #only certain columns that form the "base" data are calculated here.  
+        #Columns like upl are only calculated when the user views the pl because 
+        #those rely on market value.  This approach should be more efficient
+        #in terms of performance and coding
         if tran_type in ('buy', 'cover'):
             self.pl.loc['cash', 'market'] -= total
+            
             if new == 0:
                 new_shares = prev_shares + shares
+                
                 if tran_type == "buy":
+                    
                     if self.pl.loc[ticker, "position"] == 0:
                         self.pl.loc[ticker, "wap"] = price
             
@@ -201,43 +224,47 @@ class PL:
                 else:#Cover
                     gain = self.pl.loc[ticker, "wap"] * shares - total
                     self.pl.loc[ticker, "rpl"]  = self.pl.loc[ticker, "rpl"] + gain
+                    
+                #both    
                 self.pl.loc[ticker, "position"] = new_shares
-                
                 if new_shares == 0:#for aesthetics in the P&L
                     self.pl.loc[ticker, "wap"] = 0
                 db.pl_update(self.pl, ticker)
                 db.pl_update(self.pl, 'cash')
-            else:
+                
+            else:#new currencies
                 self.pl.loc[ticker, ['position', 'market', 'wap', 'rpl', 'upl', 'tpl', 
                      'allocation_by_dollars', 'allocation_by_shares']] = (shares, 0, price, 0, 0, 0, 0, 0)
-
                 db.pl_insert(self.pl, ticker)
                 db.pl_update(self.pl, 'cash')
-        else:
+                
+        else:#sell/short
            self.pl.loc['cash', 'market'] += total
+           
            if new == 0:
-           #process transaction
                new_shares = self.pl.loc[ticker,'position'] - shares
                
                if tran_type == "sell":
-                   
                    gain = total -  self.pl.loc[ticker, 'wap'] * shares
                    self.pl.loc[ticker, 'rpl']  = self.pl.loc[ticker, "rpl"] + gain
                    
                else:#short
+
                    if self.pl.loc[ticker, 'position'] == 0:
                        self.pl.loc[ticker, "wap"] = price
                        
                    else:
                        prev_value = prev_shares * self.pl.loc[ticker, "wap"]*-1
                        self.pl.loc[ticker, "wap"] = (prev_value + shares * price)/new_shares*-1
-                       
+               #both
                self.pl.loc[ticker, "position"] = new_shares
                if new_shares == 0:
-                   self.pl.loc[ticker, "wap"] = 0               
+                   self.pl.loc[ticker, "wap"] = 0   
+                   
                db.pl_update(self.pl, ticker)
                db.pl_update(self.pl, 'cash')
-           else:
+               
+           else:#new currencies
                self.pl.loc[ticker, ['position', 'market', 'wap', 'rpl', 'upl', 'tpl', 
                  'allocation_by_dollars', 'allocation_by_shares']] = (-shares, 0, price, 0, 0, -shares*price, 0, 0)
                db.pl_insert(self.pl, ticker)
@@ -249,27 +276,30 @@ class PL:
     def showPL(self, user):
         import numpy as np
         from get_currency_info import get_current
+        #for showing PL in different currencies
         if user.currency != 'USDT':
-            bid, ask, cur = get_current(user.currency, 'check')
+            cur = get_current(user.currency, 'check')
             mult = 1/cur
         else:
             mult = 1
+            
         final_df = self.pl.copy()[self.pl.index != 'cash']
-        #create a datafram from positions for easy calculated columns
+        #create a dataframe from positions for easy calculated columns
         markets = []
         for position in final_df.index.values:
-            bid, ask, market = get_current(position, 'check')
+            market = get_current(position, 'check')
             markets.append(market)
         final_df["market"] = markets
+        
         cash = self.pl.loc['cash', 'market'] * mult
         
-        final_df["total_value"] = final_df.position * final_df.market
-
+        #additional columns calculated from "base" data
+        final_df.loc[:, "total_value"] = final_df.position * final_df.market
         final_df.loc[:, 'share_weight'] =  abs(final_df.position)/np.sum(abs(final_df.position))
         final_df.loc[:, 'value_weight'] = abs(final_df['total_value'])/np.sum(abs(final_df['total_value']))
-        upl = final_df.position * final_df.market - final_df.position * final_df.wap
-        final_df.loc[:, "upl"] = upl
-        final_df.loc[:, 'tpl'] = final_df.upl + final_df.rpl        
+        final_df.loc[:, "upl"] = final_df.position * final_df.market - final_df.position * final_df.wap
+        final_df.loc[:, 'tpl'] = final_df.upl + final_df.rpl     
+        
         final_df.fillna(0)
         final_df.replace(np.nan, 0, inplace=True)
         
@@ -277,11 +307,13 @@ class PL:
         final_df['currency'] = currencies
         final_df = final_df[['currency', "position", "market", "total_value", 'value_weight', 'share_weight', "wap", "upl", 
                       'rpl',  "tpl"]]
+        
         final_df.loc[:, ['tpl', 'market', 'rpl', 'total_value', 'wap', 'upl']] *= mult
         #total row
         val = cash + np.sum(final_df["total_value"])
         totals = ['Total', '', '',  val,'', '', '', np.sum(final_df["upl"]), np.sum(final_df["rpl"]),
                   np.sum(final_df["tpl"])]
+        #format total row
         for item in range(len(totals)):
             if type(totals[item]) is not str:
                 totals[item] = "${:,.2f}".format(totals[item]) 
@@ -290,10 +322,11 @@ class PL:
         cash_row = ("Cash", '', '', "${:,.2f}".format(cash),'', '',  '', '','', '')
         space_row = tuple(['' for i in range(len(final_df.columns))])
         
+        #format currency rows
         for item in ["market", "total_value", "wap", "upl", "rpl", 'tpl']:
             final_df[item] = final_df[item].map('${:,.2f}'.format)
         for item in ['value_weight', 'share_weight']:
-            final_df[item] = (final_df[item]*100).map('{:,.0f}%'.format)
+            final_df[item] = (final_df[item]*100).map('{:,.1f}%'.format)
             
         rows = len(final_df)
         
@@ -311,12 +344,15 @@ class PL:
 class UserDB:
     def __init__(self):
         from pymongo import MongoClient
+        
         client = MongoClient('mongodb://cuny:data@ds153958.mlab.com:53958/currency-app', connectTimeoutMS = 50000)
         self.db = client.get_database('currency-app')
+        
         if self.db.pl.count() > 0:
             self.new_account = 0
         else:
             self.new_account = 1
+            self.db.cur.insert_one({'currency' : 'USDT'})
         
         
     def pl_insert(self, df, ticker):
@@ -326,9 +362,13 @@ class UserDB:
     def pl_update(self, df, ticker):
         item = df.loc[ticker].to_dict()
         self.db.pl.update_one({ticker : {'$exists' : True}}, {'$set': {ticker : item}})
-
+    
+    def currency_update(self, currency):
+        self.db.cur.update_one({'currency' : {'$exists' : True}}, {'$set': {'currency' : currency}})
+        
     def blotter_insert(self, date, row):
          from datetime import datetime
+         
          keys = [ "cash_balance", "currency", "net", "price",
                                  "shares", "tran_type", 'date']
          vals = list(row)

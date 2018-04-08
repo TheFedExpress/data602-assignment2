@@ -9,22 +9,19 @@ table {
 }
 
 td {
-    border: 1px solid #dddddd;
+    border: 1px solid #aaaaaa;
     text-align: left;
     padding: 8px;
 }
 
-tr:nth-child(odd) {
+tr:nth-child(even) {
     background-color: #dddddd;
 }
 th{
-    border: 1px solid #dddddd;
+    border: 2px solid #aaaaaa;
     text-align: center;
-    padding: 8px;	
-}
-fieldset{
-	width: 800px;
-    
+    padding: 12px;
+    font-weight: bold;	
 }
 title{
 	font-size: 300%;
@@ -37,14 +34,17 @@ a {
   color: white;
   padding: 2px 6px 2px 6px;
 }
-
+.cur{
+	font: bold 10px Arial;
+	float: right;
+}
 </style>
 </head>
 <body>
 	<center><h1>Blotter</h1></center>
 		<center>{{table | safe}}</center>
-	
 	<br><br>
+	<div class = 'cur'>Currency: {{currency | safe}}</div>
 	<a href = '/'>Home</a>
 </body>
 </html>
