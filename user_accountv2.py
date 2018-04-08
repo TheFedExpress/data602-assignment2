@@ -37,20 +37,19 @@ class User:
             if tran_type == "cover" and prev_shares >= 0:
                 self.message = "You do not have any short sales with this security"
             elif tran_type == "cover" and shares + prev_shares > 0:
-                self.message = "\nYou have attempted to cover {} shares.  Please cover {} shares or less"
-                self.message.format(shares, -prev_shares)
+                self.message = "You have attempted to cover {} shares.  Please cover {} shares or less"
+                self.message = self.message.format(shares, -prev_shares)
                 
             elif tran_type == "buy" and cash <= margin * 2 + shares * price:
-                self.message = "\nThis transaction requires ${:,.2f} in your account.  You have ${:,.2f}."
-                self.message.format(margin * 2 + shares * price, cash)
+                self.message = "This transaction requires ${:,.2f} in your account.  You have ${:,.2f}."
+                self.message = self.message.format(margin * 2 + shares * price, cash)
                 
             elif tran_type == "buy" and prev_shares < 0:
-                self.message = "\nYou currently have {} shares of {} shorted.  Please cover those before buying.".format(shares, ticker)
-                
+                self.message = "You currently have {} shares of {} shorted.  Please cover those before buying."
+                self.message = self.message.format(shares, ticker)
             else:#Process transaction
                 date = datetime.now ()
                 trans = (cash - total,  ticker, -total, price, shares, tran_type)
-                print(trans)
                 pl.eval_pl(tran_type, shares, price, ticker, total, db, new, prev_shares)
                 blotter.eval_blotter(db, date, trans)
                 self.message = "Success"
@@ -63,14 +62,15 @@ class User:
                 self.message = "You have a short position in {0} of {1} shares".format(ticker, prev_shares*-1)
                 
             elif tran_type == "sell" and prev_shares < shares:
-                self.message= "You have {0} shares of {1} in you account.  Please choose a different quantity to sell".format(prev_shares, ticker)
-                
+                self.message= "You have {0} shares of {1} in you account.  Please choose a different quantity to sell"
+                self.message = self.message.format(prev_shares, ticker)
                 
             elif tran_type == "short" and prev_shares > 0:
                 self.message = "You have a long position in {} of {} shares.  Please sell before shorting"
-                
+                self.message = self.message.format(ticker, prev_shares)
             elif tran_type == "short" and cash <= (margin * 2 + shares * price):
                 self.message = "This transaction requires ${:,.2f} in your account.  You have ${:,.2f}."
+                self.message = self.message.format(margin * 2 + shares * price, cash)
                 
             else:#Process transaction
                date = datetime.now ()
@@ -86,6 +86,7 @@ class User:
         db.db.blotter.delete_many({})
         db.db.cur.delete_many({})
         db.currency_update('usdt')
+        
         #reset blotter
         blotter.blotter_rows = 0
         blotter.blotter = pd.DataFrame(columns = [ "cash_balance", "currency", "net", "price",
@@ -140,6 +141,7 @@ class Blotter:
                 
     def showBlotter(self, user):
         from get_currency_info import get_current
+             
         if self.blotter_rows > 0:
             if user.currency != 'USDT':
                 cur = get_current(user.currency, 'check')
@@ -160,7 +162,8 @@ class Blotter:
             df['Transaction Date'] = dates
             
             df = df[['Transaction Date', "currency", "price", "shares", "tran_type", "net", "cash_balance"]]
-            
+            to_string = lambda x: '{:,.8f}'.format(x).rstrip('0').rstrip('.')
+            df['shares'] = df['shares'].map(to_string)
             labels = ["Transaction Date", "Currency", "Price", "Shares Traded", "Transaction Type",
                       "Net Cash Flow", "Cash Balance"]
             df.columns = labels
@@ -178,8 +181,8 @@ class PL:
         import pandas as pd
         
         if db.new_account == 1:
-            start = {"cash": {"position": 0, "market": user.starting_cash, "wap" : 0.0, "rpl": 0.0, "upl": 0.0, 
-                              "tpl": 0.0, "allocation_by_shares": 0.0, "allocation_by_dollars": 100.0}}
+            start = {"cash": {"position": 0.0, "market": user.starting_cash, "wap" : 0.0, "rpl": 0.0, "upl": 0.0, 
+                              "tpl": 0.0, "allocation_by_shares": 0.0, "allocation_by_dollars": 0.0}}
             self.pl = pd.DataFrame.from_dict(start, orient = 'index')
             db.pl_insert(self.pl, 'cash')
             
@@ -276,6 +279,8 @@ class PL:
     def showPL(self, user):
         import numpy as np
         from get_currency_info import get_current
+        
+
         #for showing PL in different currencies
         if user.currency != 'USDT':
             cur = get_current(user.currency, 'check')
@@ -305,8 +310,8 @@ class PL:
         
         currencies = final_df.index
         final_df['currency'] = currencies
-        final_df = final_df[['currency', "position", "market", "total_value", 'value_weight', 'share_weight', "wap", "upl", 
-                      'rpl',  "tpl"]]
+        final_df = final_df[['currency', "position", "market", "total_value", 'value_weight', 'share_weight', 
+                             "wap", "upl", 'rpl',  "tpl"]]
         
         final_df.loc[:, ['tpl', 'market', 'rpl', 'total_value', 'wap', 'upl']] *= mult
         #total row
@@ -327,6 +332,8 @@ class PL:
             final_df[item] = final_df[item].map('${:,.2f}'.format)
         for item in ['value_weight', 'share_weight']:
             final_df[item] = (final_df[item]*100).map('{:,.1f}%'.format)
+        to_string = lambda x: '{:,.8f}'.format(x).rstrip('0').rstrip('.')
+        final_df['position'] = final_df['position'].map(to_string)
             
         rows = len(final_df)
         

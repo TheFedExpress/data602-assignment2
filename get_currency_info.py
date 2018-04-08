@@ -63,7 +63,7 @@ def make_chart(ticker):
     labels = dates.map('{:%Y-%m-%d}'.format)[19:].values
     
     price = Scatter(x= labels, y = df.loc[19:, 'close'], line = Line(width = 2, color = 'blue'), name = ticker)
-    moving = Scatter(x= labels, y = df.loc[19:, 'moving'], line = Line(width = 2, color = 'orange'), name = 'Moving Avg')
+    moving = Scatter(x= labels, y = df.loc[19:, 'moving'], line = Line(width = 2, color = 'orange'), name = '20 Day Moving Avg')
     data = Data([price, moving])
     return data
 

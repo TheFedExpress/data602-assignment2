@@ -9,7 +9,7 @@ from flask import Flask, render_template, request, jsonify, make_response, send_
 from user_accountv2 import User, Blotter, PL, UserDB
 
 my_db = UserDB()
-account = User(my_db)
+account = User(my_db, starting = 100000000)
 my_pl = PL(account, my_db)
 my_blotter = Blotter(account, my_db)
 
@@ -23,7 +23,8 @@ def test_inputs(price, shares):
     if type(price) in (int, float):
         price_check = True
     try:
-        if round(float(shares), 7) == float(shares):
+        if round(float(shares), 8) == float(shares):#Was not able to locate a list of crytpo denominations
+                                                    #Assume they are all in 100 millionths
             share_check = True
         else:
             share_check = False
